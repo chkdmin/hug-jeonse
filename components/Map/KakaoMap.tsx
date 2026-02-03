@@ -538,7 +538,7 @@ export default function KakaoMap({
         activeOverlayRef.current = targetMarkerData.customOverlay;
       }
     }
-  }, [isLoaded, selectedPropertyId, properties]); // properties 의존성 추가
+  }, [isLoaded, selectedPropertyId]); // properties 의존성 제거 - selectedPropertyId 변경 시에만 실행
 
   // 탭 전환 시 지도 크기 재계산 및 bounds 재설정 (모바일에서 hidden→visible 전환 시 필요)
   useEffect(() => {
@@ -552,7 +552,8 @@ export default function KakaoMap({
       // 1. 지도 크기 재계산
       map.relayout();
 
-      // 2. 마커가 있고 특정 매물이 선택되지 않은 경우, 모든 마커가 보이도록 bounds 재설정
+      // 2. 마커가 있고 특정 매물이 선택되지 않은 경우에만 bounds 재설정
+      // selectedPropertyId가 있으면 위의 useEffect에서 처리하므로 여기서는 제외
       if (markersRef.current.length > 0 && !selectedPropertyId) {
         const bounds = new window.kakao.maps.LatLngBounds();
         // 중복 제거를 위해 Set 사용
@@ -565,7 +566,7 @@ export default function KakaoMap({
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [isLoaded, isVisible, selectedPropertyId]);
+  }, [isLoaded, isVisible]); // selectedPropertyId 의존성 제거 - 탭 전환 시에만 실행
 
   if (error) {
     return (
