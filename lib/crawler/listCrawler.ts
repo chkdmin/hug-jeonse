@@ -22,6 +22,11 @@ function parseArea(text: string): number {
   return match ? parseFloat(match[0]) : 0;
 }
 
+function cleanText(text: string): string {
+  // 연속된 공백을 하나로 정리
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 async function fetchPage(pageNo: number): Promise<Buffer> {
   const formData = new URLSearchParams();
   formData.append('pageIndex', pageNo.toString());
@@ -65,10 +70,10 @@ function parsePage(html: string): CrawledProperty[] {
     const detail_url = `https://www.khug.or.kr/jeonse/web/s07/s070103.jsp?dt=${dt}&no=${no}`;
 
     // 데이터 추출 (새로운 인덱스)
-    const address = $(cells.eq(5)).text().trim(); // 주소
-    const sido = $(cells.eq(3)).text().trim(); // 시도
-    const gugun = $(cells.eq(4)).text().trim(); // 구군
-    const building_type = $(cells.eq(6)).text().trim(); // 건물유형
+    const address = cleanText($(cells.eq(5)).text()); // 주소
+    const sido = cleanText($(cells.eq(3)).text()); // 시도
+    const gugun = cleanText($(cells.eq(4)).text()); // 구군
+    const building_type = cleanText($(cells.eq(6)).text()); // 건물유형
     const area_m2 = parseArea($(cells.eq(8)).text()); // 면적
     const deposit = parseDeposit($(cells.eq(9)).text()); // 보증금 (원 -> 만원)
 
@@ -93,17 +98,8 @@ function parsePage(html: string): CrawledProperty[] {
 
 export async function crawlListPage(pageNo: number): Promise<CrawledProperty[]> {
   const buffer = await fetchPage(pageNo);
-  // UTF-8로 먼저 시도, 실패하면 EUC-KR
-  let html: string;
-  try {
-    html = buffer.toString('utf-8');
-    // UTF-8이 아닌 경우 깨진 문자가 있을 수 있음
-    if (html.includes('�')) {
-      html = iconv.decode(buffer, 'EUC-KR');
-    }
-  } catch {
-    html = iconv.decode(buffer, 'EUC-KR');
-  }
+  // 허그 사이트는 EUC-KR 인코딩 사용
+  const html = iconv.decode(buffer, 'EUC-KR');
   return parsePage(html);
 }
 
