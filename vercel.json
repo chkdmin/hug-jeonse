@@ -1,31 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/crawl?startPage=1&endPage=10",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/crawl?startPage=11&endPage=20",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/crawl?startPage=21&endPage=30",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/crawl?startPage=31&endPage=40",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/crawl?startPage=41&endPage=50",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/crawl?startPage=51&endPage=60",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/crawl?startPage=61&endPage=70",
+      "path": "/api/crawl",
       "schedule": "0 * * * *"
     }
   ]

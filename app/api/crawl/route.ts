@@ -63,6 +63,50 @@ async function upsertProperty(
   return propertyData;
 }
 
+// 페이지 범위별 크롤링 작업
+async function crawlPageRange(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  startPage: number,
+  endPage: number,
+  skipDetail: boolean
+): Promise<{ processed: number; errors: number }> {
+  const properties = await crawlAllPages(endPage, undefined, startPage);
+
+  let processed = 0;
+  let errors = 0;
+
+  for (const property of properties) {
+    try {
+      if (skipDetail) {
+        const { data: existing } = await supabase
+          .from('properties')
+          .select('id')
+          .eq('announcement_no', property.announcement_no)
+          .single();
+
+        if (!existing) {
+          const coords = await geocodeAddress(property.address);
+          await supabase.from('properties').insert({
+            ...property,
+            latitude: coords?.latitude,
+            longitude: coords?.longitude,
+            recruitment_count: 1,
+            images: [],
+          });
+        }
+      } else {
+        await upsertProperty(supabase, property);
+      }
+      processed++;
+    } catch (error) {
+      console.error(`Error processing ${property.announcement_no}:`, error);
+      errors++;
+    }
+  }
+
+  return { processed, errors };
+}
+
 export async function POST(request: Request) {
   try {
     // 인증 확인 (Vercel Cron 또는 관리자만 접근 가능)
@@ -80,62 +124,51 @@ export async function POST(request: Request) {
     const startPage = parseInt(searchParams.get('startPage') || '1', 10);
     const endPage = parseInt(searchParams.get('endPage') || '70', 10);
     const skipDetail = searchParams.get('skipDetail') === 'true';
+    const parallel = searchParams.get('parallel') !== 'false'; // 기본값 true
 
-    console.log(`Starting crawl: pages ${startPage}-${endPage}, skipDetail=${skipDetail}`);
+    console.log(`Starting crawl: pages ${startPage}-${endPage}, parallel=${parallel}, skipDetail=${skipDetail}`);
 
-    // 리스트 크롤링
-    const properties = await crawlAllPages(endPage, (page, total) => {
-      console.log(`Progress: ${page}/${total}`);
-    }, startPage);
+    let totalProcessed = 0;
+    let totalErrors = 0;
 
-    console.log(`Found ${properties.length} properties`);
+    if (parallel && startPage === 1 && endPage === 70) {
+      // 병렬 크롤링: 7개 범위로 나눠서 동시 실행
+      const ranges = [
+        { start: 1, end: 10 },
+        { start: 11, end: 20 },
+        { start: 21, end: 30 },
+        { start: 31, end: 40 },
+        { start: 41, end: 50 },
+        { start: 51, end: 60 },
+        { start: 61, end: 70 },
+      ];
 
-    let processed = 0;
-    let errors = 0;
+      console.log('Running parallel crawl with 7 workers...');
 
-    // 데이터 저장
-    for (const property of properties) {
-      try {
-        if (skipDetail) {
-          // 상세 정보 없이 기본 정보만 저장
-          const { data: existing } = await supabase
-            .from('properties')
-            .select('id')
-            .eq('announcement_no', property.announcement_no)
-            .single();
+      const results = await Promise.all(
+        ranges.map(({ start, end }) => crawlPageRange(supabase, start, end, skipDetail))
+      );
 
-          if (!existing) {
-            const coords = await geocodeAddress(property.address);
-            await supabase.from('properties').insert({
-              ...property,
-              latitude: coords?.latitude,
-              longitude: coords?.longitude,
-              recruitment_count: 1,
-              images: [],
-            });
-          }
-        } else {
-          await upsertProperty(supabase, property);
-        }
-        processed++;
-      } catch (error) {
-        console.error(`Error processing ${property.announcement_no}:`, error);
-        errors++;
+      for (const result of results) {
+        totalProcessed += result.processed;
+        totalErrors += result.errors;
       }
-
-      // 진행 상황 로그
-      if (processed % 10 === 0) {
-        console.log(`Processed: ${processed}/${properties.length}`);
-      }
+    } else {
+      // 순차 크롤링 (특정 범위 지정 시)
+      const result = await crawlPageRange(supabase, startPage, endPage, skipDetail);
+      totalProcessed = result.processed;
+      totalErrors = result.errors;
     }
+
+    console.log(`Crawl completed: ${totalProcessed} processed, ${totalErrors} errors`);
 
     return NextResponse.json({
       success: true,
       message: `Crawl completed`,
       stats: {
-        total: properties.length,
-        processed,
-        errors,
+        total: totalProcessed + totalErrors,
+        processed: totalProcessed,
+        errors: totalErrors,
       },
     });
   } catch (error) {
