@@ -12,7 +12,7 @@ function formatDeposit(deposit: number): string {
   if (deposit >= 10000) {
     const eok = Math.floor(deposit / 10000);
     const man = deposit % 10000;
-    return man > 0 ? `${eok}억 ${man.toLocaleString()}` : `${eok}억`;
+    return man > 0 ? `${eok}억 ${man.toLocaleString()}만` : `${eok}억`;
   }
   return `${deposit.toLocaleString()}만`;
 }
