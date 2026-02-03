@@ -105,11 +105,12 @@ export async function crawlListPage(pageNo: number): Promise<CrawledProperty[]> 
 
 export async function crawlAllPages(
   maxPages: number = 70,
-  onProgress?: (page: number, total: number) => void
+  onProgress?: (page: number, total: number) => void,
+  startPage: number = 1
 ): Promise<CrawledProperty[]> {
   const allProperties: CrawledProperty[] = [];
 
-  for (let page = 1; page <= maxPages; page++) {
+  for (let page = startPage; page <= maxPages; page++) {
     try {
       const properties = await crawlListPage(page);
 

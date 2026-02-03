@@ -77,15 +77,16 @@ export async function POST(request: Request) {
 
     // URL에서 옵션 파싱
     const { searchParams } = new URL(request.url);
-    const maxPages = parseInt(searchParams.get('maxPages') || '70', 10);
+    const startPage = parseInt(searchParams.get('startPage') || '1', 10);
+    const endPage = parseInt(searchParams.get('endPage') || '70', 10);
     const skipDetail = searchParams.get('skipDetail') === 'true';
 
-    console.log(`Starting crawl with maxPages=${maxPages}, skipDetail=${skipDetail}`);
+    console.log(`Starting crawl: pages ${startPage}-${endPage}, skipDetail=${skipDetail}`);
 
     // 리스트 크롤링
-    const properties = await crawlAllPages(maxPages, (page, total) => {
+    const properties = await crawlAllPages(endPage, (page, total) => {
       console.log(`Progress: ${page}/${total}`);
-    });
+    }, startPage);
 
     console.log(`Found ${properties.length} properties`);
 
