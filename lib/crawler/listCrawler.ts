@@ -10,23 +10,16 @@ function delay(ms: number): Promise<void> {
 }
 
 function parseDeposit(text: string): number {
-  // "12,000" -> 12000 (만원 단위)
-  const cleaned = text.replace(/[,\s]/g, '');
-  return parseInt(cleaned, 10) || 0;
+  // "37,800,000" -> 3780 (만원 단위로 변환)
+  const cleaned = text.replace(/[,\s원]/g, '');
+  const won = parseInt(cleaned, 10) || 0;
+  return Math.round(won / 10000); // 원 -> 만원
 }
 
 function parseArea(text: string): number {
-  // "84.99㎡" -> 84.99
+  // "16.56" -> 16.56
   const match = text.match(/[\d.]+/);
   return match ? parseFloat(match[0]) : 0;
-}
-
-function extractSidoGugun(address: string): { sido: string; gugun: string } {
-  const parts = address.split(/\s+/);
-  return {
-    sido: parts[0] || '',
-    gugun: parts[1] || '',
-  };
 }
 
 async function fetchPage(pageNo: number): Promise<Buffer> {
@@ -56,27 +49,31 @@ function parsePage(html: string): CrawledProperty[] {
   const $ = cheerio.load(html);
   const properties: CrawledProperty[] = [];
 
-  // 테이블 행 파싱 (헤더 제외)
-  $('table.list tbody tr, table.list tr').each((_, row) => {
+  // 테이블 행 파싱 - 새로운 구조: table.d_board.d_list 또는 .d_list
+  $('table.d_list tbody tr, table.d_board tbody tr, .d_list tbody tr').each((_, row) => {
     const cells = $(row).find('td');
-    if (cells.length < 6) return;
+    if (cells.length < 10) return;
 
-    // 상세 링크에서 공고번호 추출
-    const detailLink = $(cells[1]).find('a').attr('onclick') || '';
-    const match = detailLink.match(/fn_detail\('([^']+)',\s*'([^']+)'\)/);
+    // 6번째 td에서 상세 링크 추출 (a 태그의 href)
+    const detailLink = $(cells.eq(5)).find('a').attr('href') || '';
+    // href 예: s070103.jsp?dt=20260130&no=2022158113
+    const match = detailLink.match(/dt=(\d+)&no=(\d+)/);
     if (!match) return;
 
     const [, dt, no] = match;
     const announcement_no = `${dt}_${no}`;
     const detail_url = `https://www.khug.or.kr/jeonse/web/s07/s070103.jsp?dt=${dt}&no=${no}`;
 
-    const property_name = $(cells[1]).text().trim();
-    const address = $(cells[2]).text().trim();
-    const building_type = $(cells[3]).text().trim();
-    const area_m2 = parseArea($(cells[4]).text());
-    const deposit = parseDeposit($(cells[5]).text());
+    // 데이터 추출 (새로운 인덱스)
+    const address = $(cells.eq(5)).text().trim(); // 주소
+    const sido = $(cells.eq(3)).text().trim(); // 시도
+    const gugun = $(cells.eq(4)).text().trim(); // 구군
+    const building_type = $(cells.eq(6)).text().trim(); // 건물유형
+    const area_m2 = parseArea($(cells.eq(8)).text()); // 면적
+    const deposit = parseDeposit($(cells.eq(9)).text()); // 보증금 (원 -> 만원)
 
-    const { sido, gugun } = extractSidoGugun(address);
+    // 물건명 = 주소로 사용 (별도 물건명이 없음)
+    const property_name = address;
 
     properties.push({
       announcement_no,
@@ -96,8 +93,17 @@ function parsePage(html: string): CrawledProperty[] {
 
 export async function crawlListPage(pageNo: number): Promise<CrawledProperty[]> {
   const buffer = await fetchPage(pageNo);
-  // EUC-KR 인코딩 처리
-  const html = iconv.decode(buffer, 'EUC-KR');
+  // UTF-8로 먼저 시도, 실패하면 EUC-KR
+  let html: string;
+  try {
+    html = buffer.toString('utf-8');
+    // UTF-8이 아닌 경우 깨진 문자가 있을 수 있음
+    if (html.includes('�')) {
+      html = iconv.decode(buffer, 'EUC-KR');
+    }
+  } catch {
+    html = iconv.decode(buffer, 'EUC-KR');
+  }
   return parsePage(html);
 }
 
