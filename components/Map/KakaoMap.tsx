@@ -89,6 +89,13 @@ export default function KakaoMap({
     };
   }, []);
 
+  // HTML 이스케이프 함수 (XSS 방어)
+  const escapeHtml = (text: string): string => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+
   // 마커 생성 함수
   const createMarker = useCallback((property: Property): MarkerData | null => {
     if (!mapRef.current || !property.latitude || !property.longitude) return null;
@@ -113,8 +120,8 @@ export default function KakaoMap({
 
     const infoContent = `
       <div style="padding:10px;min-width:200px;font-size:13px;">
-        <div style="font-weight:bold;margin-bottom:5px;color:#333;">${property.property_name}</div>
-        <div style="color:#666;margin-bottom:3px;">${property.address}</div>
+        <div style="font-weight:bold;margin-bottom:5px;color:#333;">${escapeHtml(property.property_name)}</div>
+        <div style="color:#666;margin-bottom:3px;">${escapeHtml(property.address)}</div>
         <div style="color:#2563eb;font-weight:bold;">보증금: ${formatDeposit(property.deposit)}원</div>
         <div style="color:#666;">면적: ${property.area_m2?.toFixed(1)}㎡</div>
         <div style="color:#666;">경쟁률: ${property.recruitment_count > 0 ? (property.applicant_count / property.recruitment_count).toFixed(2) : '-'}:1</div>
