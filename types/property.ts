@@ -58,6 +58,7 @@ export interface CrawledProperty {
   detail_url: string;
   sido: string;
   gugun: string;
+  applicant_count: number;
 }
 
 export interface PropertyDetail {

@@ -44,7 +44,7 @@ async function upsertProperty(
     gugun: property.gugun,
     latitude,
     longitude,
-    applicant_count: detail?.applicant_count ?? 0,
+    applicant_count: property.applicant_count,
     recruitment_count: detail?.recruitment_count ?? 1,
     images: detail?.images ?? [],
     application_start: detail?.application_start,
@@ -110,7 +110,6 @@ export async function POST(request: Request) {
               ...property,
               latitude: coords?.latitude,
               longitude: coords?.longitude,
-              applicant_count: 0,
               recruitment_count: 1,
               images: [],
             });

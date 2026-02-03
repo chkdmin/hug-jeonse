@@ -76,6 +76,7 @@ function parsePage(html: string): CrawledProperty[] {
     const building_type = cleanText($(cells.eq(6)).text()); // 건물유형
     const area_m2 = parseArea($(cells.eq(8)).text()); // 면적
     const deposit = parseDeposit($(cells.eq(9)).text()); // 보증금 (원 -> 만원)
+    const applicant_count = parseInt($(cells.eq(10)).text().trim(), 10) || 0; // 신청자수
 
     // 물건명 = 주소로 사용 (별도 물건명이 없음)
     const property_name = address;
@@ -90,6 +91,7 @@ function parsePage(html: string): CrawledProperty[] {
       detail_url,
       sido,
       gugun,
+      applicant_count,
     });
   });
 
