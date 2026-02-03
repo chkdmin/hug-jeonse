@@ -36,7 +36,7 @@ export default function KakaoMap({
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const markersRef = useRef<MarkerData[]>([]);
   const groupedMarkersRef = useRef<GroupedMarkerData[]>([]);
-  const allMarkersRef = useRef<kakao.maps.Marker[]>([]); // 지도에 직접 추가된 모든 마커
+  const clustererRef = useRef<kakao.maps.MarkerClusterer | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +65,51 @@ export default function KakaoMap({
 
         const map = new kakao.maps.Map(mapContainerRef.current, options);
         mapRef.current = map;
+
+        // 클러스터러 생성
+        clustererRef.current = new kakao.maps.MarkerClusterer({
+          map,
+          averageCenter: true,
+          minLevel: 6,
+          gridSize: 60,
+          disableClickZoom: false,
+          styles: [
+            {
+              width: '44px',
+              height: '44px',
+              background: '#0F4C5C',
+              borderRadius: '50%',
+              color: '#fff',
+              textAlign: 'center',
+              lineHeight: '44px',
+              fontWeight: '700',
+              fontSize: '14px',
+            },
+            {
+              width: '54px',
+              height: '54px',
+              background: '#E36414',
+              borderRadius: '50%',
+              color: '#fff',
+              textAlign: 'center',
+              lineHeight: '54px',
+              fontWeight: '700',
+              fontSize: '15px',
+            },
+            {
+              width: '64px',
+              height: '64px',
+              background: '#C2410C',
+              borderRadius: '50%',
+              color: '#fff',
+              textAlign: 'center',
+              lineHeight: '64px',
+              fontWeight: '700',
+              fontSize: '16px',
+            },
+          ],
+          calculator: [10, 50],
+        });
 
         // 줌 컨트롤 추가
         const zoomControl = new kakao.maps.ZoomControl();
@@ -138,13 +183,13 @@ export default function KakaoMap({
     content.className = 'custom-overlay-card';
     content.style.cssText = `
       background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
       padding: 16px;
-      width: 280px;
+      width: 320px;
       font-family: var(--font-sans);
       position: absolute;
-      bottom: 42px; /* 핀 높이만큼 위로 띄움 */
+      bottom: 42px;
       left: 50%;
       transform: translateX(-50%);
       border: 1px solid #e5e7eb;
@@ -152,7 +197,7 @@ export default function KakaoMap({
       z-index: 100;
       transition: transform 0.2s;
     `;
-    
+
     // 호버 효과 추가
     content.onmouseenter = () => { content.style.transform = 'translateX(-50%) scale(1.02)'; };
     content.onmouseleave = () => { content.style.transform = 'translateX(-50%) scale(1)'; };
@@ -163,32 +208,31 @@ export default function KakaoMap({
     };
 
     content.innerHTML = `
-      <div style="font-size: 13px; color: #6b7280; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      <div style="font-size: 14px; color: #374151; margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
         ${property.address}
       </div>
-      <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <div>
-          <span style="font-size: 12px; color: #6b7280;">보증금</span>
-          <div style="font-weight: 800; font-size: 18px; color: #0F4C5C;">
-            ${formatDeposit(property.deposit)}<span style="font-size: 13px; font-weight: normal; color: #6b7280;">원</span>
+          <span style="font-size: 13px; color: #6b7280;">보증금</span>
+          <div style="font-weight: 800; font-size: 20px; color: #0F4C5C;">
+            ${formatDeposit(property.deposit)}<span style="font-size: 14px; font-weight: normal; color: #6b7280;">원</span>
           </div>
         </div>
         <div style="text-align: right;">
-          <span style="font-size: 12px; color: #6b7280;">전용면적</span>
-          <div style="font-weight: 600; font-size: 14px; color: #111827;">
+          <span style="font-size: 13px; color: #6b7280;">전용면적</span>
+          <div style="font-weight: 600; font-size: 16px; color: #111827;">
             ${property.area_m2?.toFixed(1)}㎡
           </div>
         </div>
       </div>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3f4f6;">
-        <span style="font-size: 12px; color: #6b7280;">경쟁률</span>
-        <span style="font-weight: 700; font-size: 14px; color: ${competitionColor};">
-          ${competitionRate > 0 ? `${Math.round(competitionRate)}:1` : '-'}
-        </span>
-      </div>
-      <!-- 클릭 힌트 -->
-      <div style="position: absolute; top: 12px; right: 12px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid #f3f4f6;">
+        <span style="font-size: 13px; color: #6b7280;">경쟁률</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-weight: 700; font-size: 15px; color: ${competitionColor};">
+            ${competitionRate > 0 ? `${Math.round(competitionRate)}:1` : '-'}
+          </span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
       </div>
 
       <!-- 말풍선 꼬리 -->
@@ -274,11 +318,11 @@ export default function KakaoMap({
     content.className = 'group-overlay-card';
     content.style.cssText = `
       background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-      padding: 12px;
-      width: 300px;
-      max-height: 320px;
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+      padding: 16px;
+      width: 320px;
+      max-height: 380px;
       overflow-y: auto;
       font-family: var(--font-sans);
       position: absolute;
@@ -291,12 +335,12 @@ export default function KakaoMap({
 
     // 헤더 (주소 + 매물 수)
     const header = document.createElement('div');
-    header.style.cssText = 'margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb;';
+    header.style.cssText = 'margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb;';
     header.innerHTML = `
-      <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      <div style="font-size: 14px; color: #374151; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
         ${firstProperty.address}
       </div>
-      <div style="font-weight: 700; font-size: 14px; color: #111827;">
+      <div style="font-weight: 700; font-size: 15px; color: #0F4C5C;">
         ${count}개 매물
       </div>
     `;
@@ -306,7 +350,7 @@ export default function KakaoMap({
     groupProperties.forEach((property, index) => {
       const item = document.createElement('div');
       item.style.cssText = `
-        padding: 10px 8px;
+        padding: 12px 10px;
         cursor: pointer;
         border-radius: 8px;
         transition: background 0.15s;
@@ -325,15 +369,18 @@ export default function KakaoMap({
       const competitionColor = competitionRate >= 3 ? '#ef4444' : competitionRate >= 1 ? '#ca8a04' : '#16a34a';
 
       item.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-          <span style="font-weight: 700; font-size: 14px; color: #0F4C5C;">${formatDeposit(property.deposit)}원</span>
-          <span style="font-size: 12px; color: #6b7280;">${property.area_m2?.toFixed(1)}㎡</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <span style="font-weight: 700; font-size: 16px; color: #0F4C5C;">${formatDeposit(property.deposit)}원</span>
+          <span style="font-size: 14px; color: #6b7280;">${property.area_m2?.toFixed(1)}㎡</span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 12px; color: #6b7280;">경쟁률</span>
-          <span style="font-size: 12px; color: ${competitionColor}; font-weight: 600;">
-            ${competitionRate > 0 ? `${Math.round(competitionRate)}:1` : '-'}
-          </span>
+          <span style="font-size: 13px; color: #6b7280;">경쟁률</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 14px; color: ${competitionColor}; font-weight: 600;">
+              ${competitionRate > 0 ? `${Math.round(competitionRate)}:1` : '-'}
+            </span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
         </div>
       `;
       content.appendChild(item);
@@ -378,11 +425,10 @@ export default function KakaoMap({
 
   // 마커 업데이트
   useEffect(() => {
-    if (!isLoaded || !mapRef.current) return;
+    if (!isLoaded || !mapRef.current || !clustererRef.current) return;
 
-    // 기존 마커 제거 (지도에서 직접 제거)
-    allMarkersRef.current.forEach(marker => marker.setMap(null));
-    allMarkersRef.current = [];
+    // 클러스터러 초기화
+    clustererRef.current.clear();
 
     // 오버레이 모두 닫기
     if (activeOverlayRef.current) {
@@ -435,9 +481,8 @@ export default function KakaoMap({
       }
     });
 
-    // 마커를 지도에 직접 추가
-    allMarkers.forEach(marker => marker.setMap(mapRef.current));
-    allMarkersRef.current = allMarkers;
+    // 클러스터러에 마커 추가
+    clustererRef.current.addMarkers(allMarkers);
 
     // 마커가 있으면 모든 마커가 보이도록 지도 범위 조정 (최초 1회 또는 필터 변경 시)
     // 단, selectedPropertyId가 없을 때만
@@ -508,9 +553,11 @@ export default function KakaoMap({
       map.relayout();
 
       // 2. 마커가 있고 특정 매물이 선택되지 않은 경우, 모든 마커가 보이도록 bounds 재설정
-      if (allMarkersRef.current.length > 0 && !selectedPropertyId) {
+      if (markersRef.current.length > 0 && !selectedPropertyId) {
         const bounds = new window.kakao.maps.LatLngBounds();
-        allMarkersRef.current.forEach((marker) => {
+        // 중복 제거를 위해 Set 사용
+        const uniqueMarkers = new Set(markersRef.current.map(m => m.marker));
+        uniqueMarkers.forEach((marker) => {
           bounds.extend(marker.getPosition());
         });
         map.setBounds(bounds);
