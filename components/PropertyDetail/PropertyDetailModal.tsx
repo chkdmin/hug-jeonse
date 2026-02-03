@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { Property } from '@/types/property';
+import { useState } from 'react';
 
 interface PropertyDetailModalProps {
   property: Property;
@@ -12,15 +12,9 @@ function formatDeposit(deposit: number): string {
   if (deposit >= 10000) {
     const eok = Math.floor(deposit / 10000);
     const man = deposit % 10000;
-    return man > 0 ? `${eok}억 ${man.toLocaleString()}만원` : `${eok}억원`;
+    return man > 0 ? `${eok}억 ${man.toLocaleString()}` : `${eok}억`;
   }
-  return `${deposit.toLocaleString()}만원`;
-}
-
-function formatCompetitionRate(applicant: number, recruitment: number): string {
-  if (recruitment === 0) return '-';
-  const rate = applicant / recruitment;
-  return `${rate.toFixed(2)}:1 (${applicant}/${recruitment})`;
+  return `${deposit.toLocaleString()}만`;
 }
 
 export default function PropertyDetailModal({ property, onClose }: PropertyDetailModalProps) {
@@ -44,29 +38,33 @@ export default function PropertyDetailModal({ property, onClose }: PropertyDetai
     }
   };
 
+  const competitionRate = property.recruitment_count > 0 
+    ? (property.applicant_count / property.recruitment_count) 
+    : 0;
+
   return (
     <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold truncate pr-4">{property.property_name}</h2>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between z-10 shrink-0">
+          <h2 className="text-lg font-bold text-gray-900 truncate pr-4">{property.property_name}</h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 p-1"
+            className="text-gray-400 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 p-2 rounded-full transition-colors"
             aria-label="닫기"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* Image Gallery */}
-        <div className="relative bg-gray-100">
-          <div className="aspect-video relative">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {/* Image Gallery */}
+          <div className="relative bg-black group aspect-video">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={images[currentImageIndex]}
@@ -76,97 +74,98 @@ export default function PropertyDetailModal({ property, onClose }: PropertyDetai
                 (e.target as HTMLImageElement).src = '/placeholder-house.svg';
               }}
             />
+
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={handlePrevImage}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                  aria-label="이전 이미지"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleNextImage}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                  aria-label="다음 이미지"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-full font-medium">
+                  {currentImageIndex + 1} / {images.length}
+                </div>
+              </>
+            )}
           </div>
 
-          {images.length > 1 && (
-            <>
-              <button
-                onClick={handlePrevImage}
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"
-                aria-label="이전 이미지"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <button
-                onClick={handleNextImage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"
-                aria-label="다음 이미지"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-3 py-1 rounded-full">
-                {currentImageIndex + 1} / {images.length}
-              </div>
-            </>
-          )}
-        </div>
+          {/* Content */}
+          <div className="p-6 space-y-8">
+            {/* 핵심 정보: 보증금 */}
+            <div className="text-center">
+              <span className="text-sm font-medium text-gray-500 mb-1 block">보증금</span>
+              <p className="text-4xl font-extrabold text-primary tracking-tight">
+                {formatDeposit(property.deposit)}<span className="text-xl text-gray-500 font-normal ml-1">원</span>
+              </p>
+            </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* 기본 정보 */}
-          <div>
-            <h3 className="text-sm font-medium text-gray-500 mb-2">기본 정보</h3>
-            <dl className="grid grid-cols-2 gap-4">
-              <div>
-                <dt className="text-sm text-gray-500">주소</dt>
-                <dd className="text-sm font-medium">{property.address}</dd>
+            {/* 상세 스펙 그리드 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <span className="text-xs text-gray-500 block mb-1">전용면적</span>
+                <p className="text-lg font-bold text-gray-900">{property.area_m2?.toFixed(2)}㎡</p>
               </div>
-              <div>
-                <dt className="text-sm text-gray-500">건물유형</dt>
-                <dd className="text-sm font-medium">{property.building_type || '-'}</dd>
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <span className="text-xs text-gray-500 block mb-1">건물유형</span>
+                <p className="text-lg font-bold text-gray-900">{property.building_type || '-'}</p>
               </div>
-              <div>
-                <dt className="text-sm text-gray-500">전용면적</dt>
-                <dd className="text-sm font-medium">{property.area_m2?.toFixed(2)}㎡</dd>
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <span className="text-xs text-gray-500 block mb-1">경쟁률</span>
+                <div className="flex items-center gap-2">
+                  <p className={`text-lg font-bold ${competitionRate >= 3 ? 'text-red-500' : competitionRate >= 1 ? 'text-yellow-600' : 'text-green-600'}`}>
+                    {competitionRate > 0 ? `${competitionRate.toFixed(2)}:1` : '-'}
+                  </p>
+                  <span className="text-xs text-gray-400">({property.applicant_count}/{property.recruitment_count})</span>
+                </div>
               </div>
-              <div>
-                <dt className="text-sm text-gray-500">보증금</dt>
-                <dd className="text-sm font-medium text-blue-600">{formatDeposit(property.deposit)}</dd>
-              </div>
-            </dl>
-          </div>
-
-          {/* 청약 정보 */}
-          <div>
-            <h3 className="text-sm font-medium text-gray-500 mb-2">청약 정보</h3>
-            <dl className="grid grid-cols-2 gap-4">
-              <div>
-                <dt className="text-sm text-gray-500">경쟁률</dt>
-                <dd className="text-sm font-medium">
-                  {formatCompetitionRate(property.applicant_count, property.recruitment_count)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">청약기간</dt>
-                <dd className="text-sm font-medium">
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <span className="text-xs text-gray-500 block mb-1">청약기간</span>
+                <p className="text-sm font-semibold text-gray-900 break-keep leading-tight">
                   {property.application_start && property.application_end
                     ? `${property.application_start} ~ ${property.application_end}`
                     : '-'}
-                </dd>
+                </p>
               </div>
-            </dl>
-          </div>
+            </div>
 
-          {/* 버튼 영역 */}
-          <div className="flex gap-3 pt-4 border-t">
+            {/* 주소 정보 */}
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                위치 정보
+              </h3>
+              <p className="text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm">
+                {property.address}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Buttons */}
+        <div className="p-6 border-t border-gray-100 bg-white shrink-0">
+          <div className="flex gap-3">
             <a
               href={property.detail_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 bg-blue-600 text-white text-center py-3 rounded-lg hover:bg-blue-700 font-medium"
+              className="flex-1 bg-secondary hover:bg-secondary-light text-white text-center py-3.5 rounded-xl font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 group"
             >
-              원본 사이트에서 보기
+              <span>원본 사이트에서 신청하기</span>
+              <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
             </a>
-            <button
-              onClick={onClose}
-              className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 font-medium"
-            >
-              닫기
-            </button>
           </div>
         </div>
       </div>
