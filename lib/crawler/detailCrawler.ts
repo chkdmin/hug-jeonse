@@ -83,16 +83,19 @@ function parseDetailPage(html: string): PropertyDetail {
     }
   });
 
-  // 이미지 URL 추출
+  // 이미지 URL 추출 (실제 매물 이미지는 /updata/ 경로 사용)
   $('img').each((_, el) => {
     const src = $(el).attr('src');
-    if (src && (src.includes('upload') || src.includes('image') || src.includes('photo'))) {
-      let imageUrl = src;
-      if (!src.startsWith('http')) {
-        imageUrl = `https://www.khug.or.kr${src.startsWith('/') ? '' : '/'}${src}`;
-      }
-      if (!images.includes(imageUrl)) {
-        images.push(imageUrl);
+    if (src && (src.includes('updata') || src.includes('upload') || src.includes('/cm/'))) {
+      // .jpg, .png, .gif 등 이미지 파일만 추출
+      if (src.match(/\.(jpg|jpeg|png|gif)$/i)) {
+        let imageUrl = src;
+        if (!src.startsWith('http')) {
+          imageUrl = `https://www.khug.or.kr${src.startsWith('/') ? '' : '/'}${src}`;
+        }
+        if (!images.includes(imageUrl)) {
+          images.push(imageUrl);
+        }
       }
     }
   });
