@@ -13,14 +13,29 @@ declare namespace kakao.maps {
   class Map {
     constructor(container: HTMLElement, options: MapOptions);
     setCenter(latlng: LatLng): void;
-    setLevel(level: number): void;
+    setLevel(level: number, options?: { animate?: boolean }): void;
+    getLevel(): number;
     setBounds(bounds: LatLngBounds): void;
     addControl(control: ZoomControl, position: ControlPosition): void;
+    relayout(): void;
+    panTo(latlng: LatLng): void;
   }
 
   interface MapOptions {
     center: LatLng;
     level: number;
+  }
+
+  class Size {
+    constructor(width: number, height: number);
+  }
+
+  class Point {
+    constructor(x: number, y: number);
+  }
+
+  class MarkerImage {
+    constructor(src: string, size: Size, options?: { offset?: Point });
   }
 
   class Marker {
@@ -33,6 +48,7 @@ declare namespace kakao.maps {
     position: LatLng;
     title?: string;
     map?: Map;
+    image?: MarkerImage;
   }
 
   class InfoWindow {
@@ -45,6 +61,28 @@ declare namespace kakao.maps {
     content: string;
   }
 
+  class CustomOverlay {
+    constructor(options: CustomOverlayOptions);
+    setMap(map: Map | null): void;
+    getMap(): Map | null;
+    setPosition(position: LatLng): void;
+    getPosition(): LatLng;
+    setContent(content: string | HTMLElement): void;
+    getContent(): string | HTMLElement;
+    setZIndex(zIndex: number): void;
+    getZIndex(): number;
+  }
+
+  interface CustomOverlayOptions {
+    content: string | HTMLElement;
+    position: LatLng;
+    clickable?: boolean;
+    xAnchor?: number;
+    yAnchor?: number;
+    zIndex?: number;
+    map?: Map;
+  }
+
   class MarkerClusterer {
     constructor(options: MarkerClustererOptions);
     addMarkers(markers: Marker[]): void;
@@ -55,8 +93,10 @@ declare namespace kakao.maps {
     map: Map;
     averageCenter?: boolean;
     minLevel?: number;
+    gridSize?: number;
     disableClickZoom?: boolean;
     styles?: ClusterStyle[];
+    calculator?: number[];
   }
 
   interface ClusterStyle {
@@ -66,6 +106,9 @@ declare namespace kakao.maps {
     color: string;
     textAlign: string;
     lineHeight: string;
+    borderRadius?: string;
+    fontWeight?: string;
+    fontSize?: string;
   }
 
   class ZoomControl {
