@@ -29,7 +29,7 @@ function cleanText(text: string): string {
 
 async function fetchPage(pageNo: number): Promise<Buffer> {
   const formData = new URLSearchParams();
-  formData.append('pageIndex', pageNo.toString());
+  formData.append('cur_page', pageNo.toString());
   formData.append('searchCondition', '');
   formData.append('searchKeyword', '');
 
