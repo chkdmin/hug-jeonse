@@ -24,9 +24,9 @@
 ## Phase 1: 프로젝트 초기 설정
 
 ### Task 1.1: Next.js 프로젝트 생성
-- [ ] `npx create-next-app@latest` 실행
+- [x] `npx create-next-app@latest` 실행
   - TypeScript, Tailwind CSS, App Router, ESLint 사용
-- [ ] 프로젝트 구조 설정
+- [x] 프로젝트 구조 설정
   ```
   src/
   ├── app/
@@ -50,14 +50,14 @@
   ```
 
 ### Task 1.2: Supabase 설정
-- [ ] Supabase 프로젝트 생성
-- [ ] 환경 변수 설정 (.env.local)
+- [x] Supabase 프로젝트 생성
+- [x] 환경 변수 설정 (.env.local)
   ```
   NEXT_PUBLIC_SUPABASE_URL=
   NEXT_PUBLIC_SUPABASE_ANON_KEY=
   SUPABASE_SERVICE_ROLE_KEY=
   ```
-- [ ] 데이터베이스 스키마 생성:
+- [x] 데이터베이스 스키마 생성:
   ```sql
   CREATE TABLE properties (
     id SERIAL PRIMARY KEY,
@@ -90,9 +90,9 @@
   ```
 
 ### Task 1.3: 카카오맵 API 설정
-- [ ] 카카오 개발자 등록 및 앱 생성
-- [ ] JavaScript 키 발급
-- [ ] 환경 변수 추가
+- [x] 카카오 개발자 등록 및 앱 생성
+- [x] JavaScript 키 발급
+- [x] 환경 변수 추가
   ```
   NEXT_PUBLIC_KAKAO_MAP_KEY=
   KAKAO_REST_API_KEY=        # Geocoding용
@@ -103,70 +103,69 @@
 ## Phase 2: 크롤러 개발
 
 ### Task 2.1: 리스트 페이지 크롤러
-- [ ] `src/lib/crawler/listCrawler.ts` 생성
-- [ ] 기능 구현:
-  - 페이지네이션 처리 (1~70페이지)
+- [x] `src/lib/crawler/listCrawler.ts` 생성
+- [x] 기능 구현:
+  - 페이지네이션 처리 (1~70페이지) + 병렬 크롤링 지원 (startPage, endPage)
   - 각 매물의 기본 정보 추출:
     - 공고번호, 물건명, 주소
-    - 건물유형, 면적, 보증금
+    - 건물유형, 면적, 보증금, 신청자수
     - 상세페이지 URL
-  - Rate limiting (요청 간 1-2초 딜레이)
+  - Rate limiting (요청 간 1.5초 딜레이)
   - 에러 핸들링 및 재시도 로직
 
 ### Task 2.2: 상세 페이지 크롤러
-- [ ] `src/lib/crawler/detailCrawler.ts` 생성
-- [ ] 기능 구현:
+- [x] `src/lib/crawler/detailCrawler.ts` 생성
+- [x] 기능 구현:
   - 상세 정보 추출:
-    - 신청자수/모집수
     - 청약 기간
-    - 이미지 URL 목록
+    - 이미지 URL 목록 (/updata/ 패턴)
   - 이미지 URL 패턴 분석 및 추출
 
 ### Task 2.3: 주소 → 좌표 변환
-- [ ] `src/lib/crawler/geocoding.ts` 생성
-- [ ] 카카오 Geocoding API 연동
-- [ ] 배치 처리 (API 호출 제한 고려)
-- [ ] 변환 실패 시 null 처리 및 로깅
+- [x] `src/lib/crawler/geocoding.ts` 생성
+- [x] 카카오 Geocoding API 연동
+- [x] 배치 처리 (API 호출 제한 고려)
+- [x] 변환 실패 시 주소 정제 후 재시도 ("외 N필지" 제거)
 
 ### Task 2.4: 크롤링 API 엔드포인트
-- [ ] `src/app/api/crawl/route.ts` 생성
-- [ ] 크롤링 실행 → DB 저장 파이프라인
-- [ ] 중복 체크 (공고번호 기준)
-- [ ] 경쟁률 계산 로직
+- [x] `src/app/api/crawl/route.ts` 생성
+- [x] 크롤링 실행 → DB 저장 파이프라인
+- [x] 중복 체크 (공고번호 기준 upsert)
+- [x] 경쟁률 계산 로직 (DB computed column)
 
 ---
 
 ## Phase 3: 프론트엔드 개발
 
 ### Task 3.1: 카카오맵 컴포넌트
-- [ ] `src/components/Map/KakaoMap.tsx` 생성
-- [ ] 기능:
+- [x] `src/components/Map/KakaoMap.tsx` 생성
+- [x] 기능:
   - 지도 초기화 (서울 중심)
   - 매물 마커 표시
   - 마커 클릭 시 인포윈도우 (간략 정보)
   - 마커 클러스터링 (매물 많을 때)
-  - 지도 영역 변경 시 visible 매물 필터링
+  - XSS 방어 (HTML 이스케이프)
 
 ### Task 3.2: 필터 컴포넌트
-- [ ] `src/components/Filters/FilterPanel.tsx` 생성
-- [ ] 필터 옵션:
+- [x] `src/components/Filters/FilterPanel.tsx` 생성
+- [x] 필터 옵션:
   - 시/도 선택 (다중선택)
   - 구/군 선택 (다중선택, 시도에 따라 동적)
-  - 보증금 범위 (슬라이더 또는 min/max)
-  - 면적 범위 (슬라이더 또는 min/max)
-- [ ] URL 쿼리스트링과 동기화 (공유 가능)
+  - 보증금 범위 (min/max 입력)
+  - 면적 범위 (min/max 입력)
+- [x] URL 쿼리스트링과 동기화 (공유 가능)
 
 ### Task 3.3: 매물 리스트 컴포넌트
-- [ ] `src/components/PropertyList/PropertyList.tsx` 생성
-- [ ] 기능:
-  - 카드/테이블 뷰 전환
-  - 정렬 옵션 (경쟁률, 보증금, 면적)
-  - 무한 스크롤 또는 페이지네이션
+- [x] `src/components/PropertyList/PropertyList.tsx` 생성
+- [x] 기능:
+  - 카드 뷰
+  - 정렬 옵션 (경쟁률, 보증금)
+  - 페이지네이션
   - 매물 클릭 시 지도에서 해당 위치 표시
 
 ### Task 3.4: 매물 카드 컴포넌트
-- [ ] `src/components/PropertyCard/PropertyCard.tsx` 생성
-- [ ] 표시 정보:
+- [x] `src/components/PropertyCard/PropertyCard.tsx` 생성
+- [x] 표시 정보:
   - 썸네일 이미지
   - 물건명, 주소
   - 보증금, 면적
@@ -174,60 +173,60 @@
   - 즐겨찾기 버튼
 
 ### Task 3.5: 매물 상세 모달
-- [ ] `src/components/PropertyDetail/PropertyDetailModal.tsx` 생성
-- [ ] 기능:
+- [x] `src/components/PropertyDetail/PropertyDetailModal.tsx` 생성
+- [x] 기능:
   - 전체 정보 표시
-  - 이미지 갤러리/슬라이더
+  - 이미지 갤러리
   - 원본 사이트 링크
   - 청약 기간 표시
 
 ### Task 3.6: 즐겨찾기 기능
-- [ ] `src/hooks/useFavorites.ts` 생성
-- [ ] 로컬스토리지 기반 저장
-- [ ] 즐겨찾기 필터 토글
+- [x] `src/hooks/useFavorites.ts` 생성
+- [x] 로컬스토리지 기반 저장 (useSyncExternalStore)
+- [x] 즐겨찾기 필터 토글
 
 ---
 
 ## Phase 4: API 개발
 
 ### Task 4.1: 매물 목록 API
-- [ ] `src/app/api/properties/route.ts` 생성
-- [ ] GET 파라미터:
+- [x] `src/app/api/properties/route.ts` 생성
+- [x] GET 파라미터:
   - `sido`: 시도 필터 (콤마 구분)
   - `gugun`: 구군 필터 (콤마 구분)
   - `minDeposit`, `maxDeposit`: 보증금 범위
   - `minArea`, `maxArea`: 면적 범위
   - `sort`: 정렬 기준
   - `page`, `limit`: 페이지네이션
-- [ ] 응답: 매물 목록 + 전체 개수 + 필터 옵션
+- [x] 응답: 매물 목록 + 전체 개수 + 페이지 정보
 
 ### Task 4.2: 매물 상세 API
-- [ ] `src/app/api/properties/[id]/route.ts` 생성
-- [ ] 상세 정보 반환
+- [x] `src/app/api/properties/[id]/route.ts` 생성
+- [x] 상세 정보 반환
 
 ### Task 4.3: 필터 옵션 API
-- [ ] `src/app/api/filters/route.ts` 생성
-- [ ] DB에서 동적으로 시도/구군 목록 추출
-- [ ] 보증금/면적 min/max 값 제공
+- [x] `src/app/api/filters/route.ts` 생성
+- [x] DB에서 동적으로 시도/구군 목록 추출
+- [x] 보증금/면적 min/max 값 제공
 
 ---
 
 ## Phase 5: 통합 및 최적화
 
 ### Task 5.1: 메인 페이지 통합
-- [ ] `src/app/page.tsx` 구현
-- [ ] 레이아웃: 좌측 필터+리스트, 우측 지도 (반응형)
-- [ ] 상태 관리: URL 쿼리스트링 동기화
-- [ ] 초기 데이터 로딩 (SSR 또는 CSR 선택)
+- [x] `src/app/page.tsx` 구현
+- [x] 레이아웃: 좌측 필터+리스트, 우측 지도
+- [x] 상태 관리: URL 쿼리스트링 동기화
+- [x] 초기 데이터 로딩 (CSR)
 
 ### Task 5.2: 반응형 디자인
 - [ ] 모바일: 지도/리스트 탭 전환
 - [ ] 태블릿: 적응형 레이아웃
-- [ ] 데스크톱: 사이드바 레이아웃
+- [x] 데스크톱: 사이드바 레이아웃
 
 ### Task 5.3: 성능 최적화
 - [ ] 이미지 lazy loading
-- [ ] 지도 마커 최적화 (뷰포트 내 마커만 렌더)
+- [x] 지도 마커 클러스터링
 - [ ] API 캐싱 (React Query 또는 SWR)
 - [ ] 가상 스크롤 (많은 매물 시)
 
@@ -236,12 +235,12 @@
 ## Phase 6: 배포 및 자동화
 
 ### Task 6.1: Vercel 배포
-- [ ] Vercel 프로젝트 연결
-- [ ] 환경 변수 설정
+- [x] Vercel 프로젝트 연결
+- [x] 환경 변수 설정
 - [ ] 도메인 설정 (선택)
 
 ### Task 6.2: 크롤링 스케줄링
-- [ ] Vercel Cron 설정 (vercel.json)
+- [x] Vercel Cron 설정 (vercel.json) - 매일 00:00 UTC
   ```json
   {
     "crons": [{
@@ -250,11 +249,11 @@
     }]
   }
   ```
-- [ ] 또는 GitHub Actions 워크플로우 설정
+- [ ] GitHub Actions 워크플로우 설정 (선택)
 - [ ] 크롤링 결과 알림 (선택: Slack/Discord)
 
 ### Task 6.3: 모니터링
-- [ ] 에러 로깅 설정
+- [ ] 에러 로깅 설정 (Sentry 등)
 - [ ] 크롤링 상태 대시보드 (선택)
 
 ---
@@ -296,11 +295,11 @@ Phase 2 (크롤러) ──────────────> Phase 4 (API)
 
 ## 완료 기준
 
-- [ ] 허그 든든전세 전체 매물 자동 수집
-- [ ] 카카오맵에 매물 마커 표시
-- [ ] 다중 조건 필터링 (지역, 가격, 면적)
-- [ ] 경쟁률 정렬 기능
-- [ ] 즐겨찾기 기능
-- [ ] 매물 상세 정보 및 사진 확인
-- [ ] 일일 자동 크롤링
-- [ ] Vercel 배포 완료
+- [x] 허그 든든전세 전체 매물 자동 수집 (700개)
+- [x] 카카오맵에 매물 마커 표시
+- [x] 다중 조건 필터링 (지역, 가격, 면적)
+- [x] 경쟁률 정렬 기능
+- [x] 즐겨찾기 기능
+- [x] 매물 상세 정보 및 사진 확인
+- [x] 일일 자동 크롤링 (Vercel Cron)
+- [x] Vercel 배포 완료 (https://hug-jeonse.vercel.app)
