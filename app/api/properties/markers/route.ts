@@ -46,13 +46,18 @@ export async function GET(request: NextRequest) {
       .not("latitude", "is", null)
       .not("longitude", "is", null);
 
-    // 필터 적용 (기존 로직과 동일)
-    if (filters.sido && filters.sido.length > 0) {
-      query = query.in("sido", filters.sido);
-    }
+    // 지역 필터 적용 (sido/gugun은 부모-자식 관계이므로 OR로 결합)
+    const hasSido = filters.sido && filters.sido.length > 0;
+    const hasGugun = filters.gugun && filters.gugun.length > 0;
 
-    if (filters.gugun && filters.gugun.length > 0) {
-      query = query.in("gugun", filters.gugun);
+    if (hasSido && hasGugun) {
+      const sidoValues = filters.sido!.map((s) => `"${s}"`).join(",");
+      const gugunValues = filters.gugun!.map((g) => `"${g}"`).join(",");
+      query = query.or(`sido.in.(${sidoValues}),gugun.in.(${gugunValues})`);
+    } else if (hasSido) {
+      query = query.in("sido", filters.sido!);
+    } else if (hasGugun) {
+      query = query.in("gugun", filters.gugun!);
     }
 
     if (filters.minDeposit !== undefined) {
