@@ -51,6 +51,8 @@ export default function Home() {
       maxDeposit: searchParams.get('maxDeposit') ? parseInt(searchParams.get('maxDeposit')!, 10) : undefined,
       minArea: searchParams.get('minArea') ? parseFloat(searchParams.get('minArea')!) : undefined,
       maxArea: searchParams.get('maxArea') ? parseFloat(searchParams.get('maxArea')!) : undefined,
+      minCompetitionRate: searchParams.get('minCompetitionRate') ? parseFloat(searchParams.get('minCompetitionRate')!) : undefined,
+      maxCompetitionRate: searchParams.get('maxCompetitionRate') ? parseFloat(searchParams.get('maxCompetitionRate')!) : undefined,
       sort: (searchParams.get('sort') as PropertyFilters['sort']) || undefined,
       page: parseInt(searchParams.get('page') || '1', 10),
       limit: parseInt(searchParams.get('limit') || '20', 10),
@@ -80,6 +82,12 @@ export default function Home() {
     }
     if (newFilters.maxArea !== undefined) {
       params.set('maxArea', String(newFilters.maxArea));
+    }
+    if (newFilters.minCompetitionRate !== undefined) {
+      params.set('minCompetitionRate', String(newFilters.minCompetitionRate));
+    }
+    if (newFilters.maxCompetitionRate !== undefined) {
+      params.set('maxCompetitionRate', String(newFilters.maxCompetitionRate));
     }
     if (newFilters.sort) {
       params.set('sort', newFilters.sort);
@@ -118,6 +126,8 @@ export default function Home() {
     if (currentFilters.maxDeposit !== undefined) params.set('maxDeposit', String(currentFilters.maxDeposit));
     if (currentFilters.minArea !== undefined) params.set('minArea', String(currentFilters.minArea));
     if (currentFilters.maxArea !== undefined) params.set('maxArea', String(currentFilters.maxArea));
+    if (currentFilters.minCompetitionRate !== undefined) params.set('minCompetitionRate', String(currentFilters.minCompetitionRate));
+    if (currentFilters.maxCompetitionRate !== undefined) params.set('maxCompetitionRate', String(currentFilters.maxCompetitionRate));
     return params;
   }, []);
 
@@ -171,12 +181,14 @@ export default function Home() {
     // 여기서는 간단히 JSON.stringify로 비교 (페이지 제외)
     loadMapMarkers();
   }, [
-    filters.sido, 
-    filters.gugun, 
-    filters.minDeposit, 
-    filters.maxDeposit, 
-    filters.minArea, 
+    filters.sido,
+    filters.gugun,
+    filters.minDeposit,
+    filters.maxDeposit,
+    filters.minArea,
     filters.maxArea,
+    filters.minCompetitionRate,
+    filters.maxCompetitionRate,
     createSearchParams
   ]);
 
