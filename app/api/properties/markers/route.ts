@@ -24,6 +24,12 @@ export async function GET(request: NextRequest) {
       maxArea: searchParams.get("maxArea")
         ? parseFloat(searchParams.get("maxArea")!)
         : undefined,
+      minCompetitionRate: searchParams.get("minCompetitionRate")
+        ? parseFloat(searchParams.get("minCompetitionRate")!)
+        : undefined,
+      maxCompetitionRate: searchParams.get("maxCompetitionRate")
+        ? parseFloat(searchParams.get("maxCompetitionRate")!)
+        : undefined,
       sort: searchParams.get("sort") as PropertyFilters["sort"],
       // 페이지네이션 파라미터는 무시 (전체 조회)
       page: 1,
@@ -35,7 +41,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("properties")
       .select(
-        "id, property_name, address, deposit, area_m2, latitude, longitude, recruitment_count, applicant_count"
+        "id, property_name, address, deposit, area_m2, latitude, longitude, recruitment_count, applicant_count, competition_rate"
       )
       .not("latitude", "is", null)
       .not("longitude", "is", null);
@@ -63,6 +69,14 @@ export async function GET(request: NextRequest) {
 
     if (filters.maxArea !== undefined) {
       query = query.lte("area_m2", filters.maxArea);
+    }
+
+    if (filters.minCompetitionRate !== undefined) {
+      query = query.gte("competition_rate", filters.minCompetitionRate);
+    }
+
+    if (filters.maxCompetitionRate !== undefined) {
+      query = query.lte("competition_rate", filters.maxCompetitionRate);
     }
 
     // 데이터 조회 (최대 2000개 제한 등은 Supabase 설정이나 필요에 따라 조정 가능)
