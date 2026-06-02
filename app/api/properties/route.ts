@@ -24,6 +24,12 @@ export async function GET(request: NextRequest) {
       maxArea: searchParams.get('maxArea')
         ? parseFloat(searchParams.get('maxArea')!)
         : undefined,
+      minCompetitionRate: searchParams.get('minCompetitionRate')
+        ? parseFloat(searchParams.get('minCompetitionRate')!)
+        : undefined,
+      maxCompetitionRate: searchParams.get('maxCompetitionRate')
+        ? parseFloat(searchParams.get('maxCompetitionRate')!)
+        : undefined,
       sort: searchParams.get('sort') as PropertyFilters['sort'],
       page: parseInt(searchParams.get('page') || '1', 10),
       limit: parseInt(searchParams.get('limit') || '20', 10),
@@ -55,6 +61,14 @@ export async function GET(request: NextRequest) {
 
     if (filters.maxArea !== undefined) {
       query = query.lte('area_m2', filters.maxArea);
+    }
+
+    if (filters.minCompetitionRate !== undefined) {
+      query = query.gte('competition_rate', filters.minCompetitionRate);
+    }
+
+    if (filters.maxCompetitionRate !== undefined) {
+      query = query.lte('competition_rate', filters.maxCompetitionRate);
     }
 
     // 정렬 적용
