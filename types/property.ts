@@ -34,6 +34,7 @@ export interface FilterOptions {
   gugun: Record<string, string[]>;
   depositRange: { min: number; max: number };
   areaRange: { min: number; max: number };
+  competitionRateRange: { min: number; max: number };
 }
 
 export interface PropertyFilters {
@@ -43,6 +44,8 @@ export interface PropertyFilters {
   maxDeposit?: number;
   minArea?: number;
   maxArea?: number;
+  minCompetitionRate?: number;
+  maxCompetitionRate?: number;
   sort?: 'competition_asc' | 'competition_desc' | 'deposit_asc' | 'deposit_desc';
   page?: number;
   limit?: number;
