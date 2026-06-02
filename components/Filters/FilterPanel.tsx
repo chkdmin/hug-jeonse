@@ -85,6 +85,16 @@ export default function FilterPanel({
     }
   };
 
+  // 경쟁률 범위 변경
+  const handleCompetitionRateChange = (type: 'min' | 'max', value: string) => {
+    const numValue = value === '' ? undefined : parseFloat(value);
+    if (type === 'min') {
+      handleFilterChange({ minCompetitionRate: numValue });
+    } else {
+      handleFilterChange({ maxCompetitionRate: numValue });
+    }
+  };
+
   // 정렬 변경
   const handleSortChange = (sort: PropertyFilters['sort']) => {
     handleFilterChange({ sort });
@@ -99,6 +109,8 @@ export default function FilterPanel({
       maxDeposit: undefined,
       minArea: undefined,
       maxArea: undefined,
+      minCompetitionRate: undefined,
+      maxCompetitionRate: undefined,
       sort: undefined,
       page: 1,
       limit: 20,
@@ -121,18 +133,24 @@ export default function FilterPanel({
       handleFilterChange({ minArea: undefined });
     } else if (type === 'maxArea') {
       handleFilterChange({ maxArea: undefined });
+    } else if (type === 'minCompetitionRate') {
+      handleFilterChange({ minCompetitionRate: undefined });
+    } else if (type === 'maxCompetitionRate') {
+      handleFilterChange({ maxCompetitionRate: undefined });
     }
   };
 
   const selectedSido = localFilters.sido || [];
   const selectedGugun = localFilters.gugun || [];
-  const hasActiveFilters = 
-    selectedSido.length > 0 || 
-    selectedGugun.length > 0 || 
-    localFilters.minDeposit !== undefined || 
-    localFilters.maxDeposit !== undefined || 
-    localFilters.minArea !== undefined || 
-    localFilters.maxArea !== undefined;
+  const hasActiveFilters =
+    selectedSido.length > 0 ||
+    selectedGugun.length > 0 ||
+    localFilters.minDeposit !== undefined ||
+    localFilters.maxDeposit !== undefined ||
+    localFilters.minArea !== undefined ||
+    localFilters.maxArea !== undefined ||
+    localFilters.minCompetitionRate !== undefined ||
+    localFilters.maxCompetitionRate !== undefined;
 
   return (
     <div className="bg-white border-b lg:border-r lg:border-b-0 flex flex-col h-full">
@@ -193,6 +211,18 @@ export default function FilterPanel({
                 </span>
               )}
               {/* 기타 범위 필터 칩들... 생략 가능하지만 꼼꼼히 추가 */}
+              {localFilters.minCompetitionRate !== undefined && (
+                <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
+                  경쟁률 ≥ {localFilters.minCompetitionRate}배
+                  <button onClick={() => removeFilterChip('minCompetitionRate', '')} className="ml-1 text-gray-400 hover:text-gray-600"><svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                </span>
+              )}
+              {localFilters.maxCompetitionRate !== undefined && (
+                <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
+                  경쟁률 ≤ {localFilters.maxCompetitionRate}배
+                  <button onClick={() => removeFilterChip('maxCompetitionRate', '')} className="ml-1 text-gray-400 hover:text-gray-600"><svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -352,6 +382,42 @@ export default function FilterPanel({
             <div className="flex justify-between text-xs text-gray-400 px-1">
               <span>Min: {filterOptions.areaRange.min.toFixed(0)}</span>
               <span>Max: {filterOptions.areaRange.max.toFixed(0)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 경쟁률 범위 */}
+        <div className="space-y-3">
+          <label className="text-sm font-bold text-gray-900">경쟁률 (배율)</label>
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <input
+                type="number"
+                step="0.1"
+                placeholder="최소"
+                value={localFilters.minCompetitionRate ?? ''}
+                onChange={(e) => handleCompetitionRateChange('min', e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-right pr-8"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">배</span>
+            </div>
+            <span className="text-gray-300">-</span>
+            <div className="relative flex-1">
+              <input
+                type="number"
+                step="0.1"
+                placeholder="최대"
+                value={localFilters.maxCompetitionRate ?? ''}
+                onChange={(e) => handleCompetitionRateChange('max', e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-right pr-8"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">배</span>
+            </div>
+          </div>
+          {filterOptions && (
+            <div className="flex justify-between text-xs text-gray-400 px-1">
+              <span>Min: {filterOptions.competitionRateRange.min.toFixed(1)}</span>
+              <span>Max: {filterOptions.competitionRateRange.max.toFixed(1)}</span>
             </div>
           )}
         </div>
