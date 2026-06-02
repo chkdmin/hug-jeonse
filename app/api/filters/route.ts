@@ -88,11 +88,30 @@ export async function GET() {
       max: areas.length > 0 ? Math.max(...areas) : 0,
     };
 
+    // 경쟁률 범위 조회
+    const { data: competitionRateData, error: competitionRateError } = await supabase
+      .from('properties')
+      .select('competition_rate')
+      .not('competition_rate', 'is', null)
+      .order('competition_rate', { ascending: true });
+
+    if (competitionRateError) {
+      console.error('Competition rate query error:', competitionRateError);
+      return NextResponse.json({ error: 'Failed to fetch competition rate range' }, { status: 500 });
+    }
+
+    const competitionRates = competitionRateData?.map(item => item.competition_rate).filter(r => r != null) || [];
+    const competitionRateRange = {
+      min: competitionRates.length > 0 ? Math.min(...competitionRates) : 0,
+      max: competitionRates.length > 0 ? Math.max(...competitionRates) : 0,
+    };
+
     const response: FilterOptions = {
       sido,
       gugun,
       depositRange,
       areaRange,
+      competitionRateRange,
     };
 
     return NextResponse.json(response);
