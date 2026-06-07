@@ -30,8 +30,13 @@ function cleanText(text: string): string {
 async function fetchPage(pageNo: number): Promise<Buffer> {
   const formData = new URLSearchParams();
   formData.append('cur_page', pageNo.toString());
-  formData.append('searchCondition', '');
-  formData.append('searchKeyword', '');
+  // 사이트 변경: view_Count=Y 없이는 빈 목록이 반환됨 (조회 버튼이 설정하는 값)
+  formData.append('view_Count', 'Y');
+  formData.append('CMB_SIDO', 'ALL');
+  formData.append('sbGugun', 'ALL');
+  formData.append('BJAMT', 'ALL');
+  formData.append('BJAREA', 'ALL');
+  formData.append('BJORDER', 'ALL');
 
   const response = await fetch(BASE_URL, {
     method: 'POST',

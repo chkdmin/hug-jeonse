@@ -162,6 +162,14 @@ export async function POST(request: Request) {
 
     console.log(`Crawl completed: ${totalProcessed} processed, ${totalErrors} errors`);
 
+    // 0건 크롤링은 사이트 구조 변경 등 크롤러 고장 신호 -> 에러로 처리해서 액션이 감지하게 함
+    if (totalProcessed + totalErrors === 0) {
+      return NextResponse.json(
+        { error: 'Crawl returned 0 properties - crawler may be broken' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: `Crawl completed`,
