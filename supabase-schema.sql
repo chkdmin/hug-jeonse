@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS properties (
   deposit BIGINT,
   applicant_count INT DEFAULT 0,
   recruitment_count INT DEFAULT 1,
-  competition_rate DECIMAL(5,2) GENERATED ALWAYS AS (
+  -- DECIMAL(5,2)는 999.99가 상한이라 신청자수 1000명 이상에서 overflow가 난다
+  competition_rate DECIMAL(10,2) GENERATED ALWAYS AS (
     CASE WHEN recruitment_count > 0
     THEN applicant_count::DECIMAL / recruitment_count
     ELSE 0 END
