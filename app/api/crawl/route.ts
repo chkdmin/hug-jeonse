@@ -11,6 +11,27 @@ import { CrawledProperty } from '@/types/property';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5분 타임아웃 (Vercel Pro 기준)
 
+// 매물 1건 처리에 4~5회의 네트워크 왕복이 필요하다. 순차 처리하면 300건이
+// 타임아웃을 넘기므로 제한된 동시성으로 처리한다 (허그/카카오 부하 고려해 낮게 유지).
+const UPSERT_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  let cursor = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      await fn(items[index]);
+    }
+  });
+
+  await Promise.all(workers);
+}
+
 async function upsertProperty(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   property: CrawledProperty
@@ -105,58 +126,6 @@ async function cleanupStaleProperties(
   return stale.length;
 }
 
-// 페이지 범위별 크롤링 작업
-async function crawlPageRange(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
-  startPage: number,
-  endPage: number,
-  skipDetail: boolean
-): Promise<{
-  processed: number;
-  errors: number;
-  announcementNos: string[];
-  failedPages: number[];
-}> {
-  const { properties, failedPages } = await crawlAllPages(endPage, undefined, startPage);
-
-  // 삭제 판단 기준은 "사이트 목록에 존재하는가"이므로 upsert 성공 여부와 무관하게 수집
-  const announcementNos = properties.map(p => p.announcement_no);
-
-  let processed = 0;
-  let errors = 0;
-
-  for (const property of properties) {
-    try {
-      if (skipDetail) {
-        const { data: existing } = await supabase
-          .from('properties')
-          .select('id')
-          .eq('announcement_no', property.announcement_no)
-          .single();
-
-        if (!existing) {
-          const coords = await geocodeAddress(property.address);
-          await supabase.from('properties').insert({
-            ...property,
-            latitude: coords?.latitude,
-            longitude: coords?.longitude,
-            recruitment_count: 1,
-            images: [],
-          });
-        }
-      } else {
-        await upsertProperty(supabase, property);
-      }
-      processed++;
-    } catch (error) {
-      console.error(`Error processing ${property.announcement_no}:`, error);
-      errors++;
-    }
-  }
-
-  return { processed, errors, announcementNos, failedPages };
-}
-
 export async function POST(request: Request) {
   try {
     // 인증 확인 (Vercel Cron 또는 관리자만 접근 가능)
@@ -177,58 +146,57 @@ export async function POST(request: Request) {
     const parallel = searchParams.get('parallel') !== 'false'; // 기본값 true
     const cleanup = searchParams.get('cleanup') !== 'false'; // 기본값 true
 
-    console.log(`Starting crawl: pages ${startPage}-${endPage}, parallel=${parallel}, skipDetail=${skipDetail}`);
+    console.log(
+      `Starting crawl: pages ${startPage}-${endPage}, parallel=${parallel}, skipDetail=${skipDetail}`
+    );
 
-    let totalProcessed = 0;
-    let totalErrors = 0;
-    const activeAnnouncementNos = new Set<string>();
-    const failedPages: number[] = [];
+    // ------------------------------------------------------------------
+    // 1단계: 목록 수집 (저렴). 상세/geocoding보다 먼저 끝내서, 뒤 단계가
+    //        타임아웃되더라도 만료 매물 정리는 반드시 수행되도록 한다.
+    // ------------------------------------------------------------------
+    const ranges =
+      parallel && startPage === 1 && endPage === 70
+        ? [
+            { start: 1, end: 10 },
+            { start: 11, end: 20 },
+            { start: 21, end: 30 },
+            { start: 31, end: 40 },
+            { start: 41, end: 50 },
+            { start: 51, end: 60 },
+            { start: 61, end: 70 },
+          ]
+        : [{ start: startPage, end: endPage }];
 
-    if (parallel && startPage === 1 && endPage === 70) {
-      // 병렬 크롤링: 7개 범위로 나눠서 동시 실행
-      const ranges = [
-        { start: 1, end: 10 },
-        { start: 11, end: 20 },
-        { start: 21, end: 30 },
-        { start: 31, end: 40 },
-        { start: 41, end: 50 },
-        { start: 51, end: 60 },
-        { start: 61, end: 70 },
-      ];
+    const listResults = await Promise.all(
+      ranges.map(({ start, end }) => crawlAllPages(end, undefined, start))
+    );
 
-      console.log('Running parallel crawl with 7 workers...');
+    const failedPages = listResults.flatMap(r => r.failedPages);
 
-      const results = await Promise.all(
-        ranges.map(({ start, end }) => crawlPageRange(supabase, start, end, skipDetail))
-      );
-
-      for (const result of results) {
-        totalProcessed += result.processed;
-        totalErrors += result.errors;
-        result.announcementNos.forEach(no => activeAnnouncementNos.add(no));
-        failedPages.push(...result.failedPages);
+    // 사이트 목록에 같은 매물이 두 번 실릴 수 있으므로 중복 제거
+    const byAnnouncementNo = new Map<string, CrawledProperty>();
+    for (const result of listResults) {
+      for (const property of result.properties) {
+        byAnnouncementNo.set(property.announcement_no, property);
       }
-    } else {
-      // 순차 크롤링 (특정 범위 지정 시)
-      const result = await crawlPageRange(supabase, startPage, endPage, skipDetail);
-      totalProcessed = result.processed;
-      totalErrors = result.errors;
-      result.announcementNos.forEach(no => activeAnnouncementNos.add(no));
-      failedPages.push(...result.failedPages);
     }
+    const properties = [...byAnnouncementNo.values()];
+    const activeAnnouncementNos = new Set(byAnnouncementNo.keys());
 
-    console.log(`Crawl completed: ${totalProcessed} processed, ${totalErrors} errors`);
+    console.log(`List crawl done: ${activeAnnouncementNos.size} unique properties`);
 
     // 0건 크롤링은 사이트 구조 변경 등 크롤러 고장 신호 -> 에러로 처리해서 액션이 감지하게 함
-    if (totalProcessed + totalErrors === 0) {
+    if (properties.length === 0) {
       return NextResponse.json(
         { error: 'Crawl returned 0 properties - crawler may be broken' },
         { status: 500 }
       );
     }
 
-    // 지난 회차 정리: 전체 크롤링이 온전히 끝났을 때만 수행한다.
-    // 부분 범위 크롤링이나 페이지 실패가 있으면 목록이 불완전하므로 삭제하면 안 된다.
+    // ------------------------------------------------------------------
+    // 2단계: 지난 회차 정리. 전체 크롤링이 온전히 끝났을 때만 수행한다.
+    //        부분 범위 크롤링이나 목록 누락이 있으면 삭제하면 안 된다.
+    // ------------------------------------------------------------------
     const isFullCrawl = startPage === 1 && endPage >= 70;
     let removed = 0;
     let cleanupSkippedReason: string | null = null;
@@ -239,10 +207,10 @@ export async function POST(request: Request) {
       cleanupSkippedReason = `partial crawl (pages ${startPage}-${endPage})`;
     } else if (failedPages.length > 0) {
       cleanupSkippedReason = `incomplete list (failed pages: ${failedPages.join(', ')})`;
-    } else if (activeAnnouncementNos.size === 0) {
-      cleanupSkippedReason = 'no properties crawled';
     } else {
-      // 사이트가 밝힌 총 건수와 대조해 조기 종료/빈 응답으로 인한 오삭제를 막는다
+      // 사이트가 밝힌 총 건수와 대조해 조기 종료/빈 응답으로 인한 오삭제를 막는다.
+      // 동시 요청 시 사이트 페이지네이션이 간헐적으로 매물을 누락시키므로,
+      // 부족하면 삭제하지 않고 건너뛴다 (매시간 재시도되므로 자동 복구).
       const expectedTotal = await fetchListTotalCount();
 
       if (expectedTotal === null) {
@@ -259,13 +227,50 @@ export async function POST(request: Request) {
       console.log(`Cleanup skipped: ${cleanupSkippedReason}`);
     }
 
+    // ------------------------------------------------------------------
+    // 3단계: 상세 정보/좌표 채우기 (무거움). 타임아웃되면 다음 실행이 이어받는다.
+    // ------------------------------------------------------------------
+    let processed = 0;
+    let errors = 0;
+
+    await mapWithConcurrency(properties, UPSERT_CONCURRENCY, async property => {
+      try {
+        if (skipDetail) {
+          const { data: existing } = await supabase
+            .from('properties')
+            .select('id')
+            .eq('announcement_no', property.announcement_no)
+            .single();
+
+          if (!existing) {
+            const coords = await geocodeAddress(property.address);
+            await supabase.from('properties').insert({
+              ...property,
+              latitude: coords?.latitude,
+              longitude: coords?.longitude,
+              recruitment_count: 1,
+              images: [],
+            });
+          }
+        } else {
+          await upsertProperty(supabase, property);
+        }
+        processed++;
+      } catch (error) {
+        console.error(`Error processing ${property.announcement_no}:`, error);
+        errors++;
+      }
+    });
+
+    console.log(`Crawl completed: ${processed} processed, ${errors} errors`);
+
     return NextResponse.json({
       success: true,
       message: `Crawl completed`,
       stats: {
-        total: totalProcessed + totalErrors,
-        processed: totalProcessed,
-        errors: totalErrors,
+        total: processed + errors,
+        processed,
+        errors,
         active: activeAnnouncementNos.size,
         removed,
         cleanupSkippedReason,
