@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import * as iconv from 'iconv-lite';
-import { CrawledProperty } from '@/types/property';
+import type { CrawledProperty } from '@/types/property';
 
 const BASE_URL = 'https://www.khug.or.kr/jeonse/web/s07/s070102.jsp';
 const DELAY_MS = 1500;
@@ -25,6 +25,26 @@ function parseArea(text: string): number {
 function cleanText(text: string): string {
   // 연속된 공백을 하나로 정리
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function parseApplicationPeriod(text: string): {
+  application_start: string | null;
+  application_end: string | null;
+} {
+  // "2026.07.24. 10:00 ~ 2026.08.07. 17:00" -> 2026-07-24 / 2026-08-07
+  const dates: string[] = [];
+  const re = /(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) !== null) {
+    const [, y, m, d] = match;
+    dates.push(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
+  }
+
+  return {
+    application_start: dates[0] ?? null,
+    application_end: dates[1] ?? null,
+  };
 }
 
 async function fetchPage(pageNo: number): Promise<Buffer> {
@@ -82,6 +102,10 @@ function parsePage(html: string): CrawledProperty[] {
     const area_m2 = parseArea($(cells.eq(8)).text()); // 면적
     const deposit = parseDeposit($(cells.eq(9)).text()); // 보증금 (원 -> 만원)
     const applicant_count = parseInt($(cells.eq(10)).text().trim(), 10) || 0; // 신청자수
+    // 청약 접수기간은 목록에 이미 노출됨 ("2026.07.24. 10:00 ~ 2026.08.07. 17:00")
+    const { application_start, application_end } = parseApplicationPeriod(
+      $(cells.eq(2)).text()
+    );
 
     // 물건명 = 주소로 사용 (별도 물건명이 없음)
     const property_name = address;
@@ -97,10 +121,29 @@ function parsePage(html: string): CrawledProperty[] {
       sido,
       gugun,
       applicant_count,
+      application_start,
+      application_end,
     });
   });
 
   return properties;
+}
+
+function parseTotalCount(html: string): number | null {
+  // 목록 상단/하단의 "총 300건" 표기
+  const $ = cheerio.load(html);
+  const match = $('body').text().replace(/\s+/g, ' ').match(/총\s*([\d,]+)\s*건/);
+  return match ? parseInt(match[1].replace(/,/g, ''), 10) : null;
+}
+
+/**
+ * 사이트가 스스로 밝힌 전체 매물 건수.
+ * 크롤 결과가 완전한지 검증하는 용도 (조기 종료/빈 응답 감지).
+ */
+export async function fetchListTotalCount(): Promise<number | null> {
+  const buffer = await fetchPage(1);
+  const html = iconv.decode(buffer, 'EUC-KR');
+  return parseTotalCount(html);
 }
 
 export async function crawlListPage(pageNo: number): Promise<CrawledProperty[]> {
@@ -110,12 +153,19 @@ export async function crawlListPage(pageNo: number): Promise<CrawledProperty[]> 
   return parsePage(html);
 }
 
+export interface CrawlAllPagesResult {
+  properties: CrawledProperty[];
+  /** fetch/파싱에 실패한 페이지 번호. 비어있지 않으면 목록이 불완전하다는 뜻이다. */
+  failedPages: number[];
+}
+
 export async function crawlAllPages(
   maxPages: number = 70,
   onProgress?: (page: number, total: number) => void,
   startPage: number = 1
-): Promise<CrawledProperty[]> {
+): Promise<CrawlAllPagesResult> {
   const allProperties: CrawledProperty[] = [];
+  const failedPages: number[] = [];
 
   for (let page = startPage; page <= maxPages; page++) {
     try {
@@ -135,10 +185,11 @@ export async function crawlAllPages(
       }
     } catch (error) {
       console.error(`Error crawling page ${page}:`, error);
-      // 에러 발생 시에도 계속 진행
+      // 에러 발생 시에도 계속 진행하되, 목록이 불완전함을 호출자에게 알린다
+      failedPages.push(page);
       await delay(DELAY_MS * 2);
     }
   }
 
-  return allProperties;
+  return { properties: allProperties, failedPages };
 }

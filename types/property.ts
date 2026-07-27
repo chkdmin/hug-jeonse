@@ -62,6 +62,8 @@ export interface CrawledProperty {
   sido: string;
   gugun: string;
   applicant_count: number;
+  application_start: string | null;
+  application_end: string | null;
 }
 
 export interface PropertyDetail {
