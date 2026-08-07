@@ -1,11 +1,12 @@
 name: Crawl Properties
 
 on:
-  schedule:
-    # 매시간 실행 (UTC 기준)
-    # 회차 공백기(목록 0건)에는 크롤 API가 500을 반환해 실패 알림이 뜬다.
-    # 다음 회차까지 소음을 줄이려면 이 schedule 블록을 주석 처리할 것.
-    - cron: '0 * * * *'
+  # 회차가 마감돼 자동 크롤을 중단한 상태.
+  # 회차 공백기(목록 0건)에는 크롤 API가 500을 반환해 실패 알림이 매시간 뜬다.
+  # 다음 회차가 열리면 아래 schedule 블록의 주석을 해제할 것.
+  # schedule:
+  #   # 매시간 실행 (UTC 기준)
+  #   - cron: '0 * * * *'
   workflow_dispatch: # 수동 실행
 
 jobs:
