@@ -11,14 +11,21 @@ function delay(ms: number): Promise<void> {
 
 // 주소 정제 함수: geocoding 실패 시 재시도용
 function cleanAddressForGeocoding(address: string): string {
-  // "외 N필지" 패턴 제거
-  let cleaned = address.replace(/\s*외\s*\d+필지\s*/g, ' ');
+  // 원본 오타 보정: "서울특별 강서구" -> "서울특별시 강서구"
+  let cleaned = address.replace(/^서울특별\s/, '서울특별시 ');
+
+  // "외 N필지" 패턴 제거 (원본 오타 "필치" 포함)
+  cleaned = cleaned.replace(/\s*외\s*\d+\s*필[지치]\s*/g, ' ');
+
+  // 여러 지번 나열은 첫 지번만 남김: "367-73, 367-74, 367-183" -> "367-73"
+  cleaned = cleaned.replace(/(\d+(?:-\d+)?)(?:\s*,\s*\d+(?:-\d+)?)+/g, '$1');
+  cleaned = cleaned.replace(/,/g, ' ');
 
   // 건물명 이후 동/층/호 정보 제거
   cleaned = cleaned.replace(/\s+제?\d+동.*$/, '');
   cleaned = cleaned.replace(/\s+제?\d+층.*$/, '');
 
-  return cleaned.trim();
+  return cleaned.replace(/\s+/g, ' ').trim();
 }
 
 async function tryGeocode(address: string, apiKey: string): Promise<GeocodingResult | null> {
