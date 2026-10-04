@@ -11,9 +11,30 @@ import { CrawledProperty } from '@/types/property';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5분 타임아웃 (Vercel Pro 기준)
 
-// 매물 1건 처리에 4~5회의 네트워크 왕복이 필요하다. 순차 처리하면 300건이
-// 타임아웃을 넘기므로 제한된 동시성으로 처리한다 (허그/카카오 부하 고려해 낮게 유지).
+// 사이트 목록은 한 페이지에 10건씩 보여준다
+const LIST_PAGE_SIZE = 10;
+
+// 목록 수집 시 한 작업이 맡는 페이지 수. 작업들은 동시에 실행된다.
+const PAGES_PER_RANGE = 10;
+
+// 신규 매물 1건 처리에 4~5회의 네트워크 왕복이 필요하고, 그중 허그 상세 페이지가
+// 3~4초 걸린다. 제한된 동시성으로 처리한다 (허그/카카오 부하 고려해 낮게 유지).
 const UPSERT_CONCURRENCY = 5;
+
+// Vercel이 maxDuration에 함수를 강제 종료하면 응답이 사라져 액션이 실패로 기록된다.
+// 여유를 두고 신규 매물 처리를 멈춘 뒤 정상 응답하고, 남은 매물은 다음 실행이 이어받는다.
+const HEAVY_WORK_BUDGET_MS = (maxDuration - 60) * 1000;
+
+const BULK_UPSERT_CHUNK_SIZE = 500;
+
+type SupabaseClient = ReturnType<typeof createServerSupabaseClient>;
+
+interface ExistingRow {
+  id: number;
+  announcement_no: string;
+  latitude: number | null;
+  longitude: number | null;
+}
 
 async function mapWithConcurrency<T>(
   items: T[],
@@ -32,45 +53,23 @@ async function mapWithConcurrency<T>(
   await Promise.all(workers);
 }
 
-async function upsertProperty(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
-  property: CrawledProperty
-) {
-  // 기존 데이터 확인
-  const { data: existing } = await supabase
-    .from('properties')
-    .select('id, latitude, longitude')
-    .eq('announcement_no', property.announcement_no)
-    .single();
-
-  // 좌표가 없는 경우에만 geocoding 수행
-  let latitude = existing?.latitude;
-  let longitude = existing?.longitude;
-
-  if (!latitude || !longitude) {
-    const coords = await geocodeAddress(property.address);
-    if (coords) {
-      latitude = coords.latitude;
-      longitude = coords.longitude;
-    }
+function splitPageRanges(startPage: number, endPage: number, pagesPerRange: number) {
+  const ranges: { start: number; end: number }[] = [];
+  for (let start = startPage; start <= endPage; start += pagesPerRange) {
+    ranges.push({ start, end: Math.min(start + pagesPerRange - 1, endPage) });
   }
+  return ranges;
+}
 
-  // 상세 정보 크롤링
+// 신규 매물: 좌표 + 상세 정보까지 채워서 저장
+async function upsertProperty(supabase: SupabaseClient, property: CrawledProperty) {
+  const coords = await geocodeAddress(property.address);
   const detail = await crawlPropertyDetail(property.announcement_no);
 
   const propertyData = {
-    announcement_no: property.announcement_no,
-    property_name: property.property_name,
-    address: property.address,
-    building_type: property.building_type,
-    area_m2: property.area_m2,
-    deposit: property.deposit,
-    detail_url: property.detail_url,
-    sido: property.sido,
-    gugun: property.gugun,
-    latitude,
-    longitude,
-    applicant_count: property.applicant_count,
+    ...property,
+    latitude: coords?.latitude ?? null,
+    longitude: coords?.longitude ?? null,
     recruitment_count: detail?.recruitment_count ?? 1,
     images: detail?.images ?? [],
     // 접수기간은 목록에서 파싱한 값을 우선 사용 (상세 페이지 라벨/형식이 자주 바뀜)
@@ -90,30 +89,75 @@ async function upsertProperty(
   return propertyData;
 }
 
-// 현재 모집 회차에 없는 매물(=접수 종료된 지난 회차) 삭제
-async function cleanupStaleProperties(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
-  activeAnnouncementNos: Set<string>
-): Promise<number> {
+// 기존 매물: 목록에서 바뀌는 값(신청자수 등)만 일괄 갱신한다.
+// 상세 페이지(이미지/모집수)와 좌표는 회차 중에 바뀌지 않으므로 다시 가져오지 않는다.
+// 매번 상세를 전부 다시 가져오면 900건 회차에서 300초 제한을 넘는다.
+async function refreshListFields(
+  supabase: SupabaseClient,
+  properties: CrawledProperty[]
+): Promise<{ processed: number; errors: number }> {
+  let processed = 0;
+  let errors = 0;
+
+  for (let i = 0; i < properties.length; i += BULK_UPSERT_CHUNK_SIZE) {
+    const chunk = properties.slice(i, i + BULK_UPSERT_CHUNK_SIZE);
+    const { error } = await supabase
+      .from('properties')
+      .upsert(chunk, { onConflict: 'announcement_no' });
+
+    if (!error) {
+      processed += chunk.length;
+      continue;
+    }
+
+    // 한 행의 오류가 청크 전체를 막지 않도록 행 단위로 다시 시도해 문제 행만 걸러낸다
+    console.error('Bulk upsert error, retrying row by row:', error);
+    for (const property of chunk) {
+      const { error: rowError } = await supabase
+        .from('properties')
+        .upsert(property, { onConflict: 'announcement_no' });
+
+      if (rowError) {
+        console.error(`Error refreshing ${property.announcement_no}:`, rowError);
+        errors++;
+      } else {
+        processed++;
+      }
+    }
+  }
+
+  return { processed, errors };
+}
+
+async function fetchExistingRows(supabase: SupabaseClient): Promise<ExistingRow[]> {
   // Supabase는 한 번에 최대 1000행만 반환하므로 페이지네이션으로 전량 조회
-  const existing: { id: number; announcement_no: string }[] = [];
+  const rows: ExistingRow[] = [];
   const PAGE_SIZE = 1000;
 
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from('properties')
-      .select('id, announcement_no')
+      .select('id, announcement_no, latitude, longitude')
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw error;
     if (!data || data.length === 0) break;
 
-    existing.push(...data);
+    rows.push(...data);
     if (data.length < PAGE_SIZE) break;
   }
 
-  const stale = existing.filter(row => !activeAnnouncementNos.has(row.announcement_no));
+  return rows;
+}
+
+// 현재 모집 회차에 없는 매물(=접수 종료된 지난 회차) 삭제
+async function cleanupStaleProperties(
+  supabase: SupabaseClient,
+  existingRows: ExistingRow[],
+  activeAnnouncementNos: Set<string>
+): Promise<number> {
+  const stale = existingRows.filter(row => !activeAnnouncementNos.has(row.announcement_no));
   if (stale.length === 0) return 0;
 
   const CHUNK_SIZE = 200;
@@ -127,6 +171,8 @@ async function cleanupStaleProperties(
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
+
   try {
     // 인증 확인 (Vercel Cron 또는 관리자만 접근 가능)
     const authHeader = request.headers.get('authorization');
@@ -141,31 +187,35 @@ export async function POST(request: Request) {
     // URL에서 옵션 파싱
     const { searchParams } = new URL(request.url);
     const startPage = parseInt(searchParams.get('startPage') || '1', 10);
-    const endPage = parseInt(searchParams.get('endPage') || '70', 10);
+    const endPageParam = searchParams.get('endPage');
     const skipDetail = searchParams.get('skipDetail') === 'true';
     const parallel = searchParams.get('parallel') !== 'false'; // 기본값 true
     const cleanup = searchParams.get('cleanup') !== 'false'; // 기본값 true
 
+    // 회차마다 매물 수가 다르므로(700 -> 300 -> 900건) 마지막 페이지를 사이트가 밝힌
+    // 총 건수로 정한다. 이 값은 정리 단계에서 크롤 결과가 온전한지 검증하는 데도 쓴다.
+    const expectedTotal = await fetchListTotalCount();
+    const sitePages = expectedTotal === null ? null : Math.ceil(expectedTotal / LIST_PAGE_SIZE);
+    const endPage = endPageParam ? parseInt(endPageParam, 10) : sitePages;
+
+    if (endPage === null) {
+      return NextResponse.json(
+        { error: 'Could not read site total count - crawler may be broken' },
+        { status: 500 }
+      );
+    }
+
     console.log(
-      `Starting crawl: pages ${startPage}-${endPage}, parallel=${parallel}, skipDetail=${skipDetail}`
+      `Starting crawl: pages ${startPage}-${endPage} (site total ${expectedTotal}), parallel=${parallel}, skipDetail=${skipDetail}`
     );
 
     // ------------------------------------------------------------------
     // 1단계: 목록 수집 (저렴). 상세/geocoding보다 먼저 끝내서, 뒤 단계가
     //        타임아웃되더라도 만료 매물 정리는 반드시 수행되도록 한다.
     // ------------------------------------------------------------------
-    const ranges =
-      parallel && startPage === 1 && endPage === 70
-        ? [
-            { start: 1, end: 10 },
-            { start: 11, end: 20 },
-            { start: 21, end: 30 },
-            { start: 31, end: 40 },
-            { start: 41, end: 50 },
-            { start: 51, end: 60 },
-            { start: 61, end: 70 },
-          ]
-        : [{ start: startPage, end: endPage }];
+    const ranges = parallel
+      ? splitPageRanges(startPage, endPage, PAGES_PER_RANGE)
+      : [{ start: startPage, end: endPage }];
 
     const listResults = await Promise.all(
       ranges.map(({ start, end }) => crawlAllPages(end, undefined, start))
@@ -197,30 +247,27 @@ export async function POST(request: Request) {
     // 2단계: 지난 회차 정리. 전체 크롤링이 온전히 끝났을 때만 수행한다.
     //        부분 범위 크롤링이나 목록 누락이 있으면 삭제하면 안 된다.
     // ------------------------------------------------------------------
-    const isFullCrawl = startPage === 1 && endPage >= 70;
+    const existingRows = await fetchExistingRows(supabase);
+    const isFullCrawl = startPage === 1 && sitePages !== null && endPage >= sitePages;
     let removed = 0;
     let cleanupSkippedReason: string | null = null;
 
     if (!cleanup) {
       cleanupSkippedReason = 'cleanup=false';
+    } else if (expectedTotal === null) {
+      cleanupSkippedReason = 'could not read site total count';
     } else if (!isFullCrawl) {
-      cleanupSkippedReason = `partial crawl (pages ${startPage}-${endPage})`;
+      cleanupSkippedReason = `partial crawl (pages ${startPage}-${endPage} of ${sitePages})`;
     } else if (failedPages.length > 0) {
       cleanupSkippedReason = `incomplete list (failed pages: ${failedPages.join(', ')})`;
-    } else {
+    } else if (activeAnnouncementNos.size < expectedTotal) {
       // 사이트가 밝힌 총 건수와 대조해 조기 종료/빈 응답으로 인한 오삭제를 막는다.
       // 동시 요청 시 사이트 페이지네이션이 간헐적으로 매물을 누락시키므로,
       // 부족하면 삭제하지 않고 건너뛴다 (매시간 재시도되므로 자동 복구).
-      const expectedTotal = await fetchListTotalCount();
-
-      if (expectedTotal === null) {
-        cleanupSkippedReason = 'could not read site total count';
-      } else if (activeAnnouncementNos.size < expectedTotal) {
-        cleanupSkippedReason = `incomplete list (crawled ${activeAnnouncementNos.size} < site total ${expectedTotal})`;
-      } else {
-        removed = await cleanupStaleProperties(supabase, activeAnnouncementNos);
-        console.log(`Cleanup: removed ${removed} stale properties`);
-      }
+      cleanupSkippedReason = `incomplete list (crawled ${activeAnnouncementNos.size} < site total ${expectedTotal})`;
+    } else {
+      removed = await cleanupStaleProperties(supabase, existingRows, activeAnnouncementNos);
+      console.log(`Cleanup: removed ${removed} stale properties`);
     }
 
     if (cleanupSkippedReason) {
@@ -228,33 +275,51 @@ export async function POST(request: Request) {
     }
 
     // ------------------------------------------------------------------
-    // 3단계: 상세 정보/좌표 채우기 (무거움). 타임아웃되면 다음 실행이 이어받는다.
+    // 3단계: 기존 매물은 목록 값만 일괄 갱신 (저렴)
     // ------------------------------------------------------------------
-    let processed = 0;
-    let errors = 0;
+    const existingByNo = new Map(existingRows.map(row => [row.announcement_no, row]));
+    const knownProperties = properties.filter(p => existingByNo.has(p.announcement_no));
+    const newProperties = properties.filter(p => !existingByNo.has(p.announcement_no));
 
-    await mapWithConcurrency(properties, UPSERT_CONCURRENCY, async property => {
+    const refreshed = await refreshListFields(supabase, knownProperties);
+    let processed = refreshed.processed;
+    let errors = refreshed.errors;
+
+    // ------------------------------------------------------------------
+    // 4단계: 신규 매물 상세/좌표 채우기 (무거움). 시간 예산을 넘기면 멈추고,
+    //        남은 매물은 다음 실행에서 여전히 "신규"로 잡혀 이어서 처리된다.
+    // ------------------------------------------------------------------
+    // 좌표를 못 찾았던 기존 매물은 geocoding만 다시 시도한다
+    const missingCoords = knownProperties.filter(p => {
+      const row = existingByNo.get(p.announcement_no);
+      return !row?.latitude || !row?.longitude;
+    });
+
+    const deadline = startedAt + HEAVY_WORK_BUDGET_MS;
+    let inserted = 0;
+    let deferred = 0;
+
+    await mapWithConcurrency(newProperties, UPSERT_CONCURRENCY, async property => {
+      if (Date.now() > deadline) {
+        deferred++;
+        return;
+      }
+
       try {
         if (skipDetail) {
-          const { data: existing } = await supabase
-            .from('properties')
-            .select('id')
-            .eq('announcement_no', property.announcement_no)
-            .single();
-
-          if (!existing) {
-            const coords = await geocodeAddress(property.address);
-            await supabase.from('properties').insert({
-              ...property,
-              latitude: coords?.latitude,
-              longitude: coords?.longitude,
-              recruitment_count: 1,
-              images: [],
-            });
-          }
+          const coords = await geocodeAddress(property.address);
+          const { error } = await supabase.from('properties').insert({
+            ...property,
+            latitude: coords?.latitude,
+            longitude: coords?.longitude,
+            recruitment_count: 1,
+            images: [],
+          });
+          if (error) throw error;
         } else {
           await upsertProperty(supabase, property);
         }
+        inserted++;
         processed++;
       } catch (error) {
         console.error(`Error processing ${property.announcement_no}:`, error);
@@ -262,18 +327,43 @@ export async function POST(request: Request) {
       }
     });
 
-    console.log(`Crawl completed: ${processed} processed, ${errors} errors`);
+    let geocoded = 0;
+    await mapWithConcurrency(missingCoords, UPSERT_CONCURRENCY, async property => {
+      if (Date.now() > deadline) return;
+
+      const coords = await geocodeAddress(property.address);
+      if (!coords) return;
+
+      const { error } = await supabase
+        .from('properties')
+        .update({ latitude: coords.latitude, longitude: coords.longitude })
+        .eq('announcement_no', property.announcement_no);
+
+      if (error) {
+        console.error(`Error geocoding ${property.announcement_no}:`, error);
+      } else {
+        geocoded++;
+      }
+    });
+
+    console.log(
+      `Crawl completed: ${processed} processed (${inserted} new), ${errors} errors, ${deferred} deferred`
+    );
 
     return NextResponse.json({
       success: true,
       message: `Crawl completed`,
       stats: {
-        total: processed + errors,
+        total: processed + errors + deferred,
         processed,
+        inserted,
         errors,
+        deferred,
+        geocoded,
         active: activeAnnouncementNos.size,
         removed,
         cleanupSkippedReason,
+        elapsedSec: Math.round((Date.now() - startedAt) / 1000),
       },
     });
   } catch (error) {
